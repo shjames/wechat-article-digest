@@ -2,6 +2,7 @@ import requests
 import json
 import time
 import schedule
+import http.client
 from datetime import datetime
 
 class WeChatSummary:
@@ -25,39 +26,56 @@ class WeChatSummary:
             }
 
     def fetch_articles(self, account_name):
-        url = "https://api.jizhile.com/v1/wechat/articles"
+        conn = http.client.HTTPSConnection("www.dajiala.com")
+        payload = json.dumps({
+           "biz": "",
+           "url": "",
+           "name": account_name,
+           "key": self.api_key,
+           "verifycode": ""
+        })
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        params = {
-            "account_name": account_name
+           'Content-Type': 'application/json'
         }
         
         try:
-            response = requests.get(url, headers=headers, params=params, timeout=30)
-            response.raise_for_status()
-            return response.json().get("articles", [])
+            conn.request("POST", "/fbmain/monitor/v3/post_condition", payload, headers)
+            res = conn.getresponse()
+            data = res.read()
+            result = json.loads(data.decode("utf-8"))
+            return result.get("data", [])
         except Exception as e:
             print(f"获取公众号 {account_name} 文章失败: {e}")
             return []
 
+    def fetch_article_detail(self, article_url):
+        conn = http.client.HTTPSConnection("www.dajiala.com")
+        encoded_url = article_url.replace("&", "%26").replace("?", "%3F").replace("=", "%3D")
+        url = f"/fbmain/monitor/v3/article_detail?url={encoded_url}&key={self.api_key}&mode=2&verifycode="
+        
+        try:
+            conn.request("GET", url)
+            res = conn.getresponse()
+            data = res.read()
+            result = json.loads(data.decode("utf-8"))
+            return result.get("content", "")
+        except Exception as e:
+            print(f"获取文章详情失败: {e}")
+            return ""
+
     def summarize_article(self, article_content):
-        url = "https://api.jizhile.com/v1/chat/completions"
+        # 调用Minimax大模型进行文章总结
+        url = "https://api.minimax.chat/v1/text/chatcompletion"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
         data = {
-            "model": "gpt-4",
+            "model": "abab6-chat",
             "messages": [
                 {
-                    "role": "system",
-                    "content": "请用中文总结以下文章的重点内容，要求简洁明了，突出核心观点。"
-                },
-                {
                     "role": "user",
-                    "content": article_content
+                    "content": f"请用最简洁且准确的语言总结以下文章内容：\n\n{article_content}"
                 }
             ],
             "max_tokens": 500
@@ -67,10 +85,30 @@ class WeChatSummary:
             response = requests.post(url, headers=headers, json=data, timeout=30)
             response.raise_for_status()
             result = response.json()
-            return result["choices"][0]["message"]["content"]
+            # 检查返回结果的结构
+            if "reply" in result:
+                return result["reply"]
+            elif "choices" in result and len(result["choices"]) > 0:
+                return result["choices"][0]["message"]["content"]
+            else:
+                # 尝试使用简单摘要作为备选方案
+                if not article_content:
+                    return "文章内容为空"
+                if len(article_content) > 300:
+                    summary = article_content[:300] + "..."
+                else:
+                    summary = article_content
+                return f"简单摘要: {summary}"
         except Exception as e:
             print(f"文章总结失败: {e}")
-            return "总结失败"
+            # 尝试使用简单摘要作为备选方案
+            if not article_content:
+                return "文章内容为空"
+            if len(article_content) > 300:
+                summary = article_content[:300] + "..."
+            else:
+                summary = article_content
+            return f"简单摘要: {summary}"
 
     def process_account(self, account_name):
         print(f"正在处理公众号: {account_name}")
@@ -84,13 +122,20 @@ class WeChatSummary:
         
         for article in articles:
             print(f"  正在总结文章: {article.get('title', '无标题')}")
-            article_content = article.get("content", "")
+            # 先尝试获取文章详情内容
+            article_url = article.get("url", "")
+            article_content = self.fetch_article_detail(article_url)
+            
+            # 如果没有获取到文章详情，则使用标题和链接
+            if not article_content:
+                article_content = f"标题: {article.get('title', '无标题')}\n链接: {article.get('url', '')}"
+            
             summary = self.summarize_article(article_content)
             
             self.article_summaries[account_name].append({
                 "title": article.get("title", "无标题"),
                 "url": article.get("url", ""),
-                "publish_time": article.get("publish_time", ""),
+                "publish_time": article.get("post_time_str", article.get("publish_time", "")),
                 "summary": summary
             })
 
