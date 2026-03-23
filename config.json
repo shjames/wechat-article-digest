@@ -1,7 +1,22 @@
 {
-    "api_key": "JZLb06e1ce2d8bcaf15",
+    "wechat_api": {
+        "provider": "dajiala",
+        "api_key": "JZLb06e1ce2d8bcaf15"
+    },
+    "llm": {
+        "sdk_type": "anthropic",
+        "model": "MiniMax-M2.7",
+        "api_key": "sk-api-ND7lQ8aoYx4hRNyB8kbLDzfdF80McowZ2FPrwv7yI5beip2l27fwoc5byMHxblt7mDPvXSBEfKYk3a2acsCx6Qce_ow2IxprdxCz9aB2s8ttcU8L00un44g",
+        "base_url": "https://api.minimax.io/anthropic",
+        "timeout": 60,
+        "max_tokens": 1000,
+        "temperature": 0.3,
+        "system_prompt": "你是一个擅长总结微信公众号文章的助手。请用简洁、准确、结构清晰的中文总结文章重点，避免废话。"
+    },
     "official_accounts": [
         "数字生命卡兹克"
     ],
-    "interval": 60
+    "interval": 60,
+    "article_limit": 5,
+    "summary_prompt_template": "请阅读下面的文章内容，并输出简洁准确的中文总结。\n\n要求：\n1. 先输出“核心摘要”一段\n2. 再分别列出文章“关键信息”\n3. 如果文章明显是活动通知、产品发布、行业资讯或观点文章，请点出其性质\n4. 不要编造原文没有的信息\n5. 输出语言必须为中文\n\n文章内容如下：\n\n{article_content}"
 }

@@ -1,50 +1,44 @@
+# WeChat Article Summary Skill
+
+一个用于抓取微信公众号最近文章并调用大模型自动生成摘要的 Skill。
+
+这版采用 **sdk_type 统一模型调用架构**，不再在代码里维护不同模型厂商的默认 URL 映射，而是由用户通过配置文件显式指定：
+
+- sdk_type
+- model
+- api_key
+- base_url
+
+这样更适合长期维护，也更适合放进 OpenClaw 或类似 Agent / Skill 平台中使用。
+
 ---
-name: "wechat-summary"
-description: "抓取指定微信公众号最新文章，使用AI总结内容，并按公众号分类输出Markdown格式报告。Invoke when user wants to collect and summarize WeChat official account articles."
+
+## 一、Skill 功能
+
+本 Skill 可以完成以下工作：
+
+1. 根据公众号名称抓取该公众号最近发布的文章
+2. 获取文章详情正文
+3. 调用用户自定义配置的大模型进行文章总结
+4. 输出统一格式的 Markdown 总结文件
+5. 支持单次执行
+6. 支持定时执行
+
+输出结果示例：
+
+- `wechat_articles_summary.md`
+
 ---
 
-# 微信公众号文章抓取与总结
+## 二、项目文件结构
 
-## 功能说明
-
-这个skill可以帮助你：
-1. 配置微信公众号名称列表
-2. 使用极致了API平台接口抓取公众号最新文章
-3. 对每篇文章进行AI总结
-4. 按公众号分类整理并输出Markdown格式报告
-
-## 使用方法
-
-### 1. 配置
-
-首先编辑 `config.json` 文件，配置：
-- API密钥
-- 公众号列表
-- 定时任务间隔（分钟）
-
-### 2. 运行程序
+建议目录结构如下：
 
 ```bash
-python wechat_summary.py
+wechat-article-summary-skill/
+├── config.json
+├── requirements.txt
+├── wechat_summary.py
+├── wechat_articles_summary.md   # 运行后生成
+└── SKILL.md
 ```
-
-### 3. 输出结果
-
-程序会生成 `wechat_articles_summary.md` 文件，包含所有公众号文章的分类总结。
-
-## 文件结构
-
-- `config.json` - 配置文件
-- `wechat_summary.py` - 主程序
-- `requirements.txt` - 依赖包列表
-
-## 依赖安装
-
-```bash
-pip install -r requirements.txt
-```
-
-## 注意事项
-
-- 需要在极致了API平台获取API密钥
-- 定时任务会持续运行，按指定间隔执行
