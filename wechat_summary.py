@@ -3,6 +3,8 @@ import time
 import http.client
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+import hashlib
+import os
 
 import requests
 import schedule
@@ -228,6 +230,8 @@ class WeChatSummary:
         )
 
         self.article_summaries: Dict[str, List[Dict[str, Any]]] = {}
+        self.cache_dir = "./cache"
+        os.makedirs(self.cache_dir, exist_ok=True)
 
         self._validate_basic_config()
         self.llm_client = LLMClient(self.llm_config)
@@ -278,7 +282,25 @@ class WeChatSummary:
             print(f"获取公众号 {account_name} 文章失败: {e}")
             return []
 
+    def _get_cache_key(self, article_url: str) -> str:
+        return hashlib.md5(article_url.encode('utf-8')).hexdigest()
+
     def fetch_article_detail(self, article_url: str) -> str:
+        cache_key = self._get_cache_key(article_url)
+        cache_file = os.path.join(self.cache_dir, f"article_{cache_key}.json")
+
+        # 检查缓存
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                    if cache_data.get("content", ""):
+                        print(f"  从缓存获取文章内容: {cache_file}")
+                        return cache_data["content"]
+            except Exception as e:
+                print(f"  读取缓存失败: {e}")
+
+        # 缓存不存在，调用API
         conn = http.client.HTTPSConnection("www.dajiala.com")
         encoded_url = (
             article_url
@@ -296,13 +318,41 @@ class WeChatSummary:
             res = conn.getresponse()
             data = res.read()
             result = json.loads(data.decode("utf-8"))
-            return result.get("content", "")
+            content = result.get("content", "")
+
+            # 缓存结果
+            if content:
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump({"url": article_url, "content": content, "timestamp": time.time()}, f)
+                print(f"  文章内容已缓存: {cache_file}")
+
+            return content
         except Exception as e:
             print(f"获取文章详情失败: {e}")
             return ""
 
     def build_summary_prompt(self, article_content: str) -> str:
         return self.summary_prompt_template.replace("{article_content}", article_content)
+
+    def _preprocess_article_content(self, article_content: str) -> str:
+        # 去除HTML标签
+        import re
+        content = re.sub(r'<.*?>', '', article_content)
+        # 去除多余空格和换行
+        content = re.sub(r'\s+', ' ', content).strip()
+        # 去除冗余信息
+        redundant_patterns = [
+            r'关注.*公众号',
+            r'扫码.*关注',
+            r'点击.*查看',
+            r'分享.*好友',
+            r'点赞.*收藏',
+            r'广告.*推广',
+            r'免责声明.*'
+        ]
+        for pattern in redundant_patterns:
+            content = re.sub(pattern, '', content, flags=re.IGNORECASE)
+        return content
 
     def fallback_summary(self, article_content: str) -> str:
         if not article_content:
@@ -316,13 +366,36 @@ class WeChatSummary:
         if not article_content:
             return "文章内容为空"
 
-        prompt = self.build_summary_prompt(article_content)
+        # 缓存总结结果
+        content_hash = hashlib.md5(article_content.encode('utf-8')).hexdigest()
+        summary_cache_file = os.path.join(self.cache_dir, f"summary_{content_hash}.json")
+
+        if os.path.exists(summary_cache_file):
+            try:
+                with open(summary_cache_file, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                    if cache_data.get("summary", ""):
+                        print(f"  从缓存获取总结结果: {summary_cache_file}")
+                        return cache_data["summary"]
+            except Exception as e:
+                print(f"  读取总结缓存失败: {e}")
+
+        # 预处理文章内容，去除冗余信息
+        processed_content = self._preprocess_article_content(article_content)
+
+        # 优化prompt，减少token使用
+        prompt = self.build_summary_prompt(processed_content)
 
         try:
-            return self.llm_client.generate(prompt)
+            summary = self.llm_client.generate(prompt)
+            # 缓存总结结果
+            with open(summary_cache_file, "w", encoding="utf-8") as f:
+                json.dump({"content_hash": content_hash, "summary": summary, "timestamp": time.time()}, f)
+            print(f"  总结结果已缓存: {summary_cache_file}")
+            return summary
         except Exception as e:
             print(f"文章总结失败，已使用兜底摘要: {e}")
-            return self.fallback_summary(article_content)
+            return self.fallback_summary(processed_content)
 
     def process_account(self, account_name: str):
         print(f"正在处理公众号: {account_name}")
