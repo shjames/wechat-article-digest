@@ -259,6 +259,27 @@ class WeChatSummary:
         """
         当前实现使用 dajiala 抓取公众号文章
         """
+        # 检查文章列表缓存
+        account_hash = hashlib.md5(account_name.encode('utf-8')).hexdigest()
+        articles_cache_file = os.path.join(self.cache_dir, f"articles_{account_hash}.json")
+
+        # 先尝试使用任何缓存，包括过期缓存
+        if os.path.exists(articles_cache_file):
+            try:
+                with open(articles_cache_file, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                    articles = cache_data.get("articles", [])
+                    if articles:
+                        timestamp = cache_data.get("timestamp", 0)
+                        if time.time() - timestamp < 3600:  # 1小时有效期
+                            print(f"  从缓存获取文章列表: {articles_cache_file}")
+                        else:
+                            print(f"  使用过期缓存: {articles_cache_file}")
+                        return articles[:self.article_limit]
+            except Exception as e:
+                print(f"  读取文章列表缓存失败: {e}")
+
+        # 缓存不存在或读取失败，调用API
         conn = http.client.HTTPSConnection("www.dajiala.com")
         payload = json.dumps({
             "biz": "",
@@ -277,6 +298,13 @@ class WeChatSummary:
             data = res.read()
             result = json.loads(data.decode("utf-8"))
             articles = result.get("data", [])
+
+            # 缓存文章列表
+            if articles:
+                with open(articles_cache_file, "w", encoding="utf-8") as f:
+                    json.dump({"account": account_name, "articles": articles, "timestamp": time.time()}, f)
+                print(f"  文章列表已缓存: {articles_cache_file}")
+
             return articles[:self.article_limit]
         except Exception as e:
             print(f"获取公众号 {account_name} 文章失败: {e}")
@@ -485,19 +513,8 @@ def main():
         print(f"初始化失败: {e}")
         return
 
-    print("请选择运行模式:")
-    print("1. 单次执行")
-    print("2. 定时执行")
-
-    choice = input("请输入选项 (1/2): ").strip()
-
-    if choice == "1":
-        wechat_summary.run_once()
-    elif choice == "2":
-        wechat_summary.run_scheduled()
-    else:
-        print("无效选项，默认单次执行")
-        wechat_summary.run_once()
+    # 默认执行单次运行模式
+    wechat_summary.run_once()
 
 
 if __name__ == "__main__":
