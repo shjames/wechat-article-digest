@@ -1,12 +1,12 @@
 {
     "wechat_api": {
         "provider": "dajiala",
-        "api_key": "JZLb06e1ce2d8bcaf15"
+        "api_key": ""
     },
     "llm": {
         "sdk_type": "anthropic",
         "model": "MiniMax-M2.7",
-        "api_key": "sk-api-ND7lQ8aoYx4hRNyB8kbLDzfdF80McowZ2FPrwv7yI5beip2l27fwoc5byMHxblt7mDPvXSBEfKYk3a2acsCx6Qce_ow2IxprdxCz9aB2s8ttcU8L00un44g",
+        "api_key": "",
         "base_url": "https://api.minimaxi.com/anthropic",
         "timeout": 60,
         "max_tokens": 1000,
